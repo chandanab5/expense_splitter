@@ -43,8 +43,8 @@ class Contribution(models.Model):
         return f"{self.user.username}: {self.amount}"
 
     def clean(self):
-        if self.amount <= 0:
-            raise ValidationError("Contribution amount must be greater than zero.")
+        if self.amount < 0:
+            raise ValidationError("Contribution amount must not be negative.")
 
     def save(self, *args, **kwargs):
         self.clean()
