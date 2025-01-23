@@ -3,7 +3,7 @@ from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 # Create your models here.
 
-class Group(models.Model):
+class ExpenseGroup(models.Model):
     name = models.CharField(max_length=100, unique=True)
     members = models.ManyToManyField(User, related_name="expense_groups")
 
@@ -16,7 +16,7 @@ class Expense(models.Model):
         ("custom", "Custom"),
     ]
 
-    group = models.ForeignKey(Group, on_delete=models.CASCADE, related_name="expenses")
+    group = models.ForeignKey(ExpenseGroup, on_delete=models.CASCADE, related_name="expenses")
     description = models.CharField(max_length=255)
     amount = models.DecimalField(max_digits=10, decimal_places=2)
     split_type = models.CharField(max_length=10, choices=SPLIT_TYPE_CHOICES)
