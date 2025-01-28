@@ -1,5 +1,5 @@
 from django.urls import path
-from .views import register, groups, join_group, add_expense, group_summary
+from .views import register, groups, join_group, manage_expenses, group_summary, fetch_users
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
 urlpatterns = [
@@ -8,6 +8,7 @@ urlpatterns = [
     path('token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('groups/', groups, name='groups'),
     path('groups/<int:group_id>/join/', join_group, name='join_group'),
-    path('groups/<int:group_id>/expenses/', add_expense, name='add_expense'),
+    path('groups/<int:group_id>/expenses/', manage_expenses, name='add_expense'),
     path('groups/<int:group_id>/summary/', group_summary, name='group_summary'),
+    path('users/', fetch_users, name='fetch_users'),
 ]
