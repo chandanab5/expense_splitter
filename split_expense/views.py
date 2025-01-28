@@ -37,7 +37,6 @@ def groups(request):
         group.members.add(request.user)
         return Response(ExpenseGroupSerializer(group).data, status=status.HTTP_201_CREATED)
 
-
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def join_group(request, group_id):
@@ -49,27 +48,41 @@ def join_group(request, group_id):
         if request.user not in group.members.all():
             return Response({'error': 'You are not authorized to add members to this group'}, status=status.HTTP_403_FORBIDDEN)
 
-        # Get the username of the member to add
-        username = request.data.get('username')
-        if not username:
-            return Response({'error': 'Username is required'}, status=status.HTTP_400_BAD_REQUEST)
+        # Get the list of usernames to add
+        usernames = request.data.get('usernames', [])
+        if not usernames:
+            return Response({'error': 'At least one username is required'}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Fetch the user to add by username
-        try:
-            user_to_add = User.objects.get(username=username)
-        except User.DoesNotExist:
-            return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+        # Validate and fetch users
+        users_to_add = []
+        errors = []
+        for username in usernames:
+            try:
+                user = User.objects.get(username=username)
+                if user in group.members.all():
+                    errors.append(f'{username} is already a member of the group')
+                else:
+                    users_to_add.append(user)
+            except User.DoesNotExist:
+                errors.append(f'User {username} not found')
 
-        # Check if the user is already a member of the group
-        if user_to_add in group.members.all():
-            return Response({'error': f'{user_to_add.username} is already a member of the group'}, status=status.HTTP_400_BAD_REQUEST)
+        # If there are errors, return them
+        if errors:
+            return Response({'errors': errors}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Add the user to the group's members
-        group.members.add(user_to_add)
+        # Add the users to the group's members
+        group.members.add(*users_to_add)
 
-        return Response({'message': f'{user_to_add.username} has been added to the group successfully'}, status=status.HTTP_200_OK)
+        # Prepare success message
+        added_users = [user.username for user in users_to_add]
+        return Response({
+            'message': f'Successfully added {len(added_users)} user(s) to the group',
+            'added_users': added_users
+        }, status=status.HTTP_200_OK)
+
     except ExpenseGroup.DoesNotExist:
         return Response({'error': 'Group not found'}, status=status.HTTP_404_NOT_FOUND)
+
 
 @api_view(['GET', 'POST'])
 @permission_classes([IsAuthenticated])
@@ -126,12 +139,27 @@ def manage_expenses(request, group_id):
                 return Response({'error': 'Contributions do not match the total amount'}, status=status.HTTP_400_BAD_REQUEST)
 
             # Store the contributions
+            errors = []
             for c in contributions:
+                username = c.get('username')
+                amount = Decimal(c.get('amount'))
+                if not username or amount is None:
+                    errors.append(f"Invalid contribution data: {c}")
+                    continue
+
                 try:
-                    user = User.objects.get(id=c['user_id'])
-                    Contribution.objects.create(expense=expense, user=user, amount=Decimal(c['amount']))
+                    user = User.objects.get(username=username)
+                    if user not in group.members.all():
+                        errors.append(f"User {username} is not a member of the group")
+                        continue
+                    Contribution.objects.create(expense=expense, user=user, amount=amount)
                 except User.DoesNotExist:
-                    return Response({'error': f"User with ID {c['user_id']} not found"}, status=status.HTTP_404_NOT_FOUND)
+                    errors.append(f"User {username} not found")
+
+            # If there are errors, delete the expense and return the errors
+            if errors:
+                expense.delete()
+                return Response({'errors': errors}, status=status.HTTP_400_BAD_REQUEST)
 
         return Response(ExpenseSerializer(expense).data, status=status.HTTP_201_CREATED)
 
@@ -170,3 +198,15 @@ def fetch_users(request):
     users = User.objects.all()
     serializer = UserSerializer(users, many=True)
     return Response(serializer.data, status=200)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def group_members(request, group_id):
+    """Fetch members of a group"""
+    group = ExpenseGroup.objects.filter(id=group_id, members__in=[request.user]).first()
+    if not group:
+        return Response({'error': 'Group not found or access denied'}, status=status.HTTP_404_NOT_FOUND)
+
+    members = group.members.all()
+    serializer = UserSerializer(members, many=True)
+    return Response({'members': serializer.data}, status=status.HTTP_200_OK)
