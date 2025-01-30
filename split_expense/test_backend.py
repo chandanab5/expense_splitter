@@ -155,6 +155,105 @@ def test_group_members(client, authenticated_user):
     assert response.status_code == status.HTTP_200_OK
     assert len(response.data['members']) == 1
 
+    
+@pytest.mark.django_db
+def test_edit_group(client, authenticated_user):
+    group = ExpenseGroup.objects.create(name='Old Group Name')
+    group.members.add(authenticated_user)
+
+    url = reverse('edit_or_delete_group', kwargs={'group_id': group.id})
+    token = get_jwt_token(authenticated_user)
+
+    data = {'name': 'New Group Name'}
+    response = client.patch(url, data, content_type='application/json', HTTP_AUTHORIZATION=f'Bearer {token}')
+    
+    assert response.status_code == status.HTTP_200_OK
+    assert response.data['name'] == 'New Group Name'
+    assert ExpenseGroup.objects.first().name == 'New Group Name'
+
+
+@pytest.mark.django_db
+def test_delete_group(client, authenticated_user):
+    group = ExpenseGroup.objects.create(name='Test Group')
+    group.members.add(authenticated_user)
+
+    url = reverse('edit_or_delete_group', kwargs={'group_id': group.id})
+    token = get_jwt_token(authenticated_user)
+
+    response = client.delete(url, HTTP_AUTHORIZATION=f'Bearer {token}')
+    
+    assert response.status_code == status.HTTP_200_OK
+    assert ExpenseGroup.objects.count() == 0
+
+@pytest.mark.django_db
+def test_edit_expense(client, authenticated_user):
+    group = ExpenseGroup.objects.create(name='Test Group')
+    group.members.add(authenticated_user)
+
+    expense = Expense.objects.create(group=group, description='Old Expense', amount=100.00, split_type='equal')
+
+    url = reverse('edit_or_delete_expense', kwargs={'group_id': group.id, 'expense_id': expense.id})
+    token = get_jwt_token(authenticated_user)
+
+    data = {'description': 'Updated Expense', 'amount': '150.00', 'split_type': 'equal'}
+    response = client.patch(url, data, content_type='application/json', HTTP_AUTHORIZATION=f'Bearer {token}')
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.data['description'] == 'Updated Expense'
+    assert Expense.objects.first().amount == Decimal('150.00')
+
+
+@pytest.mark.django_db
+def test_delete_expense(client, authenticated_user):
+    group = ExpenseGroup.objects.create(name='Test Group')
+    group.members.add(authenticated_user)
+
+    expense = Expense.objects.create(group=group, description='Test Expense', amount=100.00, split_type='equal')
+
+    url = reverse('edit_or_delete_expense', kwargs={'group_id': group.id, 'expense_id': expense.id})
+    token = get_jwt_token(authenticated_user)
+
+    response = client.delete(url, HTTP_AUTHORIZATION=f'Bearer {token}')
+
+    assert response.status_code == status.HTTP_200_OK
+    assert Expense.objects.count() == 0
+
+@pytest.mark.django_db
+def test_add_group_members(client, authenticated_user):
+    group = ExpenseGroup.objects.create(name='Test Group')
+    group.members.add(authenticated_user)
+
+    new_user = User.objects.create_user(username='testuser2', password='testpassword2')
+
+    url = reverse('edit_group_members', kwargs={'group_id': group.id})
+    token = get_jwt_token(authenticated_user)
+
+    data = {'action': 'add', 'usernames': ['testuser2']}
+    response = client.patch(url, data, content_type='application/json', HTTP_AUTHORIZATION=f'Bearer {token}')
+
+    assert response.status_code == status.HTTP_200_OK
+    assert 'testuser2' in response.data['modified_users']
+    assert group.members.filter(username='testuser2').exists()
+
+
+@pytest.mark.django_db
+def test_remove_group_members(client, authenticated_user):
+    group = ExpenseGroup.objects.create(name='Test Group')
+    group.members.add(authenticated_user)
+
+    user_to_remove = User.objects.create_user(username='testuser2', password='testpassword2')
+    group.members.add(user_to_remove)
+
+    url = reverse('edit_group_members', kwargs={'group_id': group.id})
+    token = get_jwt_token(authenticated_user)
+
+    data = {'action': 'remove', 'usernames': ['testuser2']}
+    response = client.patch(url, data, content_type='application/json', HTTP_AUTHORIZATION=f'Bearer {token}')
+
+    assert response.status_code == status.HTTP_200_OK
+    assert 'testuser2' in response.data['modified_users']
+    assert not group.members.filter(username='testuser2').exists()
+
 @pytest.fixture
 def authenticated_user():
     user = User.objects.create_user(username='testuser', password='testpassword')
