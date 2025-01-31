@@ -3,6 +3,7 @@ from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 # Create your models here.
 
+#Model to represent a group of users sharing expenses
 class ExpenseGroup(models.Model):
     name = models.CharField(max_length=100, unique=True)
     members = models.ManyToManyField(User, related_name="expense_groups")
@@ -10,25 +11,28 @@ class ExpenseGroup(models.Model):
     def __str__(self):
         return self.name
 
+#Model to represent an individual expense
 class Expense(models.Model):
     SPLIT_TYPE_CHOICES = [
-        ("equal", "Equal"),
-        ("custom", "Custom"),
+        ("equal", "Equal"), #Split equally among members
+        ("custom", "Custom"), #Custom split
     ]
 
-    group = models.ForeignKey(ExpenseGroup, on_delete=models.CASCADE, related_name="expenses")
+    group = models.ForeignKey(ExpenseGroup, on_delete=models.CASCADE, related_name="expenses") #Belongs to a specific  group
     description = models.CharField(max_length=255)
     amount = models.DecimalField(max_digits=10, decimal_places=2)
-    split_type = models.CharField(max_length=10, choices=SPLIT_TYPE_CHOICES)
+    split_type = models.CharField(max_length=10, choices=SPLIT_TYPE_CHOICES) #equal or custom
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
         return f"{self.description} - {self.amount}"
-
+    
+    #Ensure expense amount is greater than zero
     def clean(self):
         if self.amount <= 0:
             raise ValidationError("Expense amount must be greater than zero.")
-
+    
+    #Validate and save the expense
     def save(self, *args, **kwargs):
         self.clean()
         super().save(*args, **kwargs)

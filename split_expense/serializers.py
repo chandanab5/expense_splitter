@@ -2,13 +2,13 @@ from rest_framework import serializers
 from django.contrib.auth.models import User
 from .models import ExpenseGroup, Expense, Contribution
 
-# UserSerializer: Serializes the User model for registration and authentication
+# Serializes the User model for registration and authentication
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = ['id', 'username','email']
 
-# GroupSerializer: Serializes the Group model including the members of the group
+# Serializes the Group model including the members of the group
 class ExpenseGroupSerializer(serializers.ModelSerializer):
     members = serializers.SlugRelatedField(queryset=User.objects.all(), slug_field='username', many=True)
 
@@ -16,19 +16,17 @@ class ExpenseGroupSerializer(serializers.ModelSerializer):
         model = ExpenseGroup
         fields = ['id', 'name', 'members']
 
-# ContributionSerializer: Serializes the Contribution model, which links users to their contributions to an expense
+# Serializes the Contribution model, which links users to their contributions to an expense
 class ContributionSerializer(serializers.ModelSerializer):
     user = serializers.SlugRelatedField(queryset=User.objects.all(), slug_field='username')
-    # expense = serializers.PrimaryKeyRelatedField(queryset=Expense.objects.all())
 
     class Meta:
         model = Contribution
         fields = ['id', 'expense', 'user', 'amount']
         
-# ExpenseSerializer: Serializes the Expense model to include the group, description, amount, and split type
+# Serializes the Expense model to include the group, description, amount, and split type
 class ExpenseSerializer(serializers.ModelSerializer):
     group = ExpenseGroupSerializer()  # Include the group details
-    # contributions = serializers.PrimaryKeyRelatedField(queryset=Contribution.objects.all(), many=True, required=False)
     contributions = ContributionSerializer(many=True,read_only=True)
 
     class Meta:

@@ -8,28 +8,34 @@ from .serializers import UserSerializer, ExpenseGroupSerializer, ExpenseSerializ
 from decimal import Decimal
 from django.db.models import Sum
 
-
+#User Registration
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def register(request):
     username = request.data.get('username')
     email = request.data.get('email')
     password = request.data.get('password')
+
+    #Ensure required fields are provided
     if not username or not email or not password:
         return Response({'error': 'Username, email and password are required'}, status=status.HTTP_400_BAD_REQUEST)
+    
+    #Create and return the new user
     user = User.objects.create_user(username=username, password=password, email=email)
     return Response(UserSerializer(user).data, status=status.HTTP_201_CREATED)
 
-
+#Expense Groups Management
 @api_view(['GET', 'POST'])
 @permission_classes([IsAuthenticated])
 def groups(request):
     if request.method == 'GET':
+        #Get all groups the user belongs to
         user_groups = request.user.expense_groups.all()
         serializer = ExpenseGroupSerializer(user_groups, many=True)
         return Response(serializer.data)
 
     if request.method == 'POST':
+        #Create a new expense group
         name = request.data.get('name')
         if not name:
             return Response({'error': 'Group name is required'}, status=status.HTTP_400_BAD_REQUEST)
@@ -37,6 +43,7 @@ def groups(request):
         group.members.add(request.user)
         return Response(ExpenseGroupSerializer(group).data, status=status.HTTP_201_CREATED)
 
+#Joining an expense group
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def join_group(request, group_id):
@@ -83,7 +90,7 @@ def join_group(request, group_id):
     except ExpenseGroup.DoesNotExist:
         return Response({'error': 'Group not found'}, status=status.HTTP_404_NOT_FOUND)
 
-
+#Managing expenses in a group
 @api_view(['GET', 'POST'])
 @permission_classes([IsAuthenticated])
 def manage_expenses(request, group_id):
@@ -133,7 +140,7 @@ def manage_expenses(request, group_id):
             # Contributions are mandatory for custom splits
             if not contributions:
                 return Response({'error': 'Contributions are required for custom split'}, status=status.HTTP_400_BAD_REQUEST)
-
+            #Check if contributions sum up to total expense
             total_contribution = sum(Decimal(c['amount']) for c in contributions)
             if total_contribution != amount:
                 return Response({'error': 'Contributions do not match the total amount'}, status=status.HTTP_400_BAD_REQUEST)
@@ -163,6 +170,7 @@ def manage_expenses(request, group_id):
 
         return Response(ExpenseSerializer(expense).data, status=status.HTTP_201_CREATED)
 
+#Fetching group summary
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def group_summary(request, group_id):
@@ -318,7 +326,8 @@ def edit_group_members(request, group_id):
 
     action = request.data.get('action')
     usernames = request.data.get('usernames', [])
-
+    
+    #Ensure valid actions are provided
     if action not in ['add', 'remove']:
         return Response({'error': 'Invalid action. Use "add" or "remove"'}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -332,9 +341,9 @@ def edit_group_members(request, group_id):
         try:
             user = User.objects.get(username=username)
             if action == 'add' and user in group.members.all():
-                errors.append(f'{username} is already a member of the group')
+                errors.append(f'{username} is already a member of the group') #adds user
             elif action == 'remove' and user not in group.members.all():
-                errors.append(f'{username} is not a member of the group')
+                errors.append(f'{username} is not a member of the group') #removes user
             else:
                 users_to_modify.append(user)
         except User.DoesNotExist:
