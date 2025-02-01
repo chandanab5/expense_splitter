@@ -78,7 +78,8 @@ This is a Django REST Framework (DRF) project for managing expense groups, track
 - `DELETE  /api/groups/<group_id>/expenses/<expense_id>/` – Delete an expense  
 
 ### Summary  
-- `GET  /api/groups/<group_id>/summary/` – Get balance details of a group  
+- `GET  /api/groups/<group_id>/summary/` – Get balance details of a group
+- `GET  /api/summary/` – Get total balance details of a user   
 
 ### Users  
 - `GET  /api/users/` – Fetch all registered users  
