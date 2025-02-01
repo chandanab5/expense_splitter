@@ -39,6 +39,11 @@ def groups(request):
         name = request.data.get('name')
         if not name:
             return Response({'error': 'Group name is required'}, status=status.HTTP_400_BAD_REQUEST)
+        
+         # Ensure the group name is unique to the logged-in user
+        if ExpenseGroup.objects.filter(name=name, members=request.user).exists():
+            return Response({'error': 'Group name must be unique to your account'}, status=status.HTTP_400_BAD_REQUEST)
+
         group = ExpenseGroup.objects.create(name=name)
         group.members.add(request.user)
         return Response(ExpenseGroupSerializer(group).data, status=status.HTTP_201_CREATED)
@@ -360,3 +365,90 @@ def edit_group_members(request, group_id):
         message = f'Successfully removed {len(users_to_modify)} user(s) from the group'
 
     return Response({'message': message, 'modified_users': [user.username for user in users_to_modify]}, status=status.HTTP_200_OK)
+
+from collections import defaultdict
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def overall_balance_summary(request):
+    """Get a summary of balances for the user across all groups"""
+    user = request.user
+    global_owed_by = defaultdict(Decimal)  # Tracks who owes the user
+    global_owes = defaultdict(Decimal)     # Tracks whom the user owes
+    total_owed_to_user = Decimal(0)
+    total_owed_by_user = Decimal(0)
+
+    groups = ExpenseGroup.objects.filter(members=user)
+
+    for group in groups:
+        contributions = Contribution.objects.filter(expense__group=group)
+        total_expense = contributions.aggregate(total=Sum('amount'))['total'] or Decimal(0)
+        member_count = group.members.count()
+        if member_count == 0:
+            continue
+        equal_share = total_expense / member_count
+
+        # Calculate each member's balance in the group
+        member_balances = {}
+        for member in group.members.all():
+            paid = contributions.filter(user=member).aggregate(total=Sum('amount'))['total'] or Decimal(0)
+            balance = paid - equal_share
+            member_balances[member.username] = balance
+
+        user_balance = member_balances.get(user.username, Decimal(0))
+
+        if user_balance > 0:
+            # User is owed money; calculate shares from members with negative balances
+            sum_neg = Decimal(0)
+            owed_by_members = {}
+            for username, balance in member_balances.items():
+                if username == user.username:
+                    continue
+                if balance < 0:
+                    owed_by_members[username] = balance
+                    sum_neg += balance
+            sum_neg_abs = abs(sum_neg)
+            if sum_neg_abs == 0:
+                continue
+            user_owed = user_balance
+            total_owed_to_user += user_owed
+            for username, balance in owed_by_members.items():
+                share = (abs(balance) / sum_neg_abs) * user_owed
+                global_owed_by[username] += share
+
+        elif user_balance < 0:
+            # User owes money; calculate shares to members with positive balances
+            user_owes_abs = abs(user_balance)
+            sum_pos = Decimal(0)
+            owes_members = {}
+            for username, balance in member_balances.items():
+                if username == user.username:
+                    continue
+                if balance > 0:
+                    owes_members[username] = balance
+                    sum_pos += balance
+            if sum_pos == 0:
+                continue
+            total_owed_by_user += user_owes_abs
+            for username, balance in owes_members.items():
+                share = (balance / sum_pos) * user_owes_abs
+                global_owes[username] += share
+
+    # Prepare the response data
+    owes_list = [
+        {"owed_to": username, "amount": round(amount, 2)}
+        for username, amount in global_owes.items()
+    ]
+    owed_by_list = [
+        {"owed_by": username, "amount": round(amount, 2)}
+        for username, amount in global_owed_by.items()
+    ]
+
+    return Response({
+        "total_owed_by_user": round(total_owed_by_user, 2),
+        "total_owed_to_user": round(total_owed_to_user, 2),
+        "owes": owes_list,
+        "owed_by": owed_by_list
+    })
+
+   
