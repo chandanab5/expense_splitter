@@ -2,6 +2,10 @@
 
 This is a Django REST Framework (DRF) project for managing expense groups, tracking expenses, and settling balances among group members. It provides endpoints for user registration, group management, expense tracking, and balance calculations.
 
+## ER DIAGRAM 
+
+![alt text](er.png) 
+
 ## Features  
 - User authentication using JWT  
 - Expense group creation and management  
