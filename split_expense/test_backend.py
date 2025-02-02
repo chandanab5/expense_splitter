@@ -254,6 +254,35 @@ def test_remove_group_members(client, authenticated_user):
     assert 'testuser2' in response.data['modified_users']
     assert not group.members.filter(username='testuser2').exists()
 
+@pytest.mark.django_db
+def test_overall_balance_summary(client, authenticated_user):
+    user = authenticated_user
+    another_user = User.objects.create_user(username='user2', password='password')
+    group = ExpenseGroup.objects.create(name='Test Group')
+    group.members.add(user, another_user)
+    
+    expense = Expense.objects.create(group=group, description='Dinner', amount=100.00, split_type='equal')
+    Contribution.objects.create(expense=expense, user=user, amount=Decimal('100.00'))
+    
+    url = reverse('overall_balance_summary')
+    token = get_jwt_token(authenticated_user)
+    response = client.get(url, HTTP_AUTHORIZATION=f'Bearer {token}')
+    
+    assert response.status_code == status.HTTP_200_OK
+    response_data = response.json()
+    
+    assert 'total_owed_by_user' in response_data
+    assert 'total_owed_to_user' in response_data
+    assert 'owes' in response_data
+    assert 'owed_by' in response_data
+    
+    # Validate amounts
+    assert response_data['total_owed_by_user'] == 0  # User paid entire expense
+    assert response_data['total_owed_to_user'] == 50.00  # Another user owes them
+    assert response_data['owed_by'][0]['owed_by'] == 'user2'
+    assert response_data['owed_by'][0]['amount'] == 50.00
+
+
 @pytest.fixture
 def authenticated_user():
     user = User.objects.create_user(username='testuser', password='testpassword')
@@ -263,3 +292,4 @@ def authenticated_user():
 def get_jwt_token(user):
     refresh = RefreshToken.for_user(user)
     return str(refresh.access_token)
+
